@@ -91,12 +91,9 @@ class OWFactorAnalysis(OWWidget):
         view.setModel(self.tablemodel)
         view.horizontalHeader()
         view.horizontalHeader().setMinimumSectionSize(40)
-        #view.selectionModel().selectionChanged.connect(self._invalidate)
         view.setShowGrid(True)
-        #view.setItemDelegate(BorderedItemDelegate(Qt.white))
         view.setSizePolicy(QSizePolicy.MinimumExpanding,
                            QSizePolicy.MinimumExpanding)
-        # view.clicked.connect(self.cell_clicked)
         box.layout().addWidget(view)
 
         gui.separator(self.mainArea)
@@ -370,6 +367,7 @@ class OWFactorAnalysis(OWWidget):
     #     self.fa_loadings = Table.from_numpy(Domain(self.dataset.domain.attributes), loadings.T)
 
     def factor_analysis(self):
+        if self.dataset is None: return
         # with chosen n_components and depending on the user-selected rotation, calculate the FA on self.dataset.
         rotation = [None, "Varimax", "Promax", "Oblimin", "Oblimax", "Quartimin", "Quartimax", "Equamax"][self.rotation]
         fa = FactorAnalyzer(rotation=rotation, n_factors=self.n_components)
