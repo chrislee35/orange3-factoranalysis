@@ -1,6 +1,6 @@
+import io
 import matplotlib.pyplot as plt
 import numpy as np
-import io
 from AnyQt.QtCore import QSize, Qt
 from Orange.data import Table
 from Orange.widgets import gui, settings
@@ -31,6 +31,7 @@ class OWFactorAnalysisViewer(OWWidget):
     
     def __init__(self):
         self.dataset = None
+        self.features_num = 0
         self.layout_control_area()
         self.layout_main_area()
         
@@ -81,6 +82,7 @@ class OWFactorAnalysisViewer(OWWidget):
         fig, axes = plt.subplots(ncols=len(methods), figsize=(10, 8), sharey=True)
         fontcolor = self.palette().windowText().color().name()
         labels = [f"Comp. {x+1}" for x in range(n_comps)]
+        ax = None
         for ax, (method, fa) in zip(axes, methods):
             fa.set_params(n_components=n_comps)
             fa.fit(X)
@@ -101,7 +103,8 @@ class OWFactorAnalysisViewer(OWWidget):
             fig.patch.set_facecolor(transparent)
             
         fig.suptitle("Factors", fontsize=20, color=fontcolor)
-
+        if ax is None:
+            return
         fig = ax.get_figure()
         svg_io = io.StringIO()
         fig.savefig(svg_io, format='svg')
