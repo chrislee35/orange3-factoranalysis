@@ -2,17 +2,15 @@ import numpy as np
 
 from factor_analyzer import FactorAnalyzer
 
-from AnyQt.QtCore import Qt, QRectF
+from AnyQt.QtCore import Qt
 from AnyQt.QtGui import QColor, QBrush, QStandardItemModel, QStandardItem
-from AnyQt.QtWidgets import QTableView, QSizePolicy, QGridLayout,QHeaderView
+from AnyQt.QtWidgets import QTableView, QSizePolicy
 
-from Orange.data import Table, Domain, DiscreteVariable, ContinuousVariable
-from Orange.data.util import get_unique_names
+from Orange.data import Table, Domain
 from Orange.widgets import settings
 from Orange.widgets.widget import OWWidget
 from orangewidget.widget import Input, Output
 from orangewidget.utils.itemmodels import PyListModel
-from Orange.widgets.utils.itemmodels import DomainModel
 from Orange.widgets.utils.slidergraph import SliderGraph
 from orangewidget import gui
 
@@ -401,7 +399,8 @@ class OWFactorAnalysis(OWWidget):
 
 if __name__ == "__main__":
     from orangewidget.utils.widgetpreview import WidgetPreview
-    #from orangecontrib.factoranalysis.widgets.darkmode import apply_dark_theme
-    data = Table("/home/chris/.local/share/Orange/3.38.1/datasets/core/hrm-employee-attrition.xlsx")
+    from orangecontrib.factoranalysis.widgets.darkmode import apply_dark_theme
+    #data = Table("/home/chris/.local/share/Orange/3.38.1/datasets/core/hrm-employee-attrition.xlsx")
+    data = Table('iris')
     #print(data)
     WidgetPreview(OWFactorAnalysis).run(data)
