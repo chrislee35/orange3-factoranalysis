@@ -11,7 +11,6 @@ from Orange.data.util import get_unique_names
 from Orange.widgets import settings
 from Orange.widgets.widget import OWWidget
 from orangewidget.widget import Input, Output
-from orangewidget.utils.widgetpreview import WidgetPreview
 from orangewidget.utils.itemmodels import PyListModel
 from Orange.widgets.utils.itemmodels import DomainModel
 from Orange.widgets.utils.slidergraph import SliderGraph
@@ -401,6 +400,7 @@ class OWFactorAnalysis(OWWidget):
             self.insert_table()
 
 if __name__ == "__main__":
+    from orangewidget.utils.widgetpreview import WidgetPreview
     #from orangecontrib.factoranalysis.widgets.darkmode import apply_dark_theme
     data = Table("/home/chris/.local/share/Orange/3.38.1/datasets/core/hrm-employee-attrition.xlsx")
     #print(data)

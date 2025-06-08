@@ -1,21 +1,16 @@
-#from AnyQt.QtCore import Qt
-from AnyQt.QtGui import QImage, QPixmap, QPalette
-from AnyQt.QtCore import QSize, Qt, QSettings
-from Orange.data import Table
-#from Orange.data import Domain, StringVariable, ContinuousVariable
-from Orange.widgets import gui, settings
-from Orange.widgets.widget import OWWidget
-from Orange.widgets.utils.widgetpreview import WidgetPreview
-from orangecontrib.imageanalytics.widgets.utils.imagepreview import Preview
-#from AnyQt.QtWidgets import (QSizePolicy, QGraphicsWidget)
-from orangewidget.widget import Input
-#from orangewidget.widget import Output
-from sklearn.decomposition import PCA, FactorAnalysis
-from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import numpy as np
+import io
+from AnyQt.QtCore import QSize, Qt
+from Orange.data import Table
+from Orange.widgets import gui, settings
+from Orange.widgets.widget import OWWidget
+from orangewidget.widget import Input
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from sklearn.decomposition import PCA, FactorAnalysis
+from sklearn.preprocessing import StandardScaler
 
-debug = None
 
 class OWFactorAnalysisViewer(OWWidget):
     name = "Factor Analysis Viewer"
@@ -40,13 +35,11 @@ class OWFactorAnalysisViewer(OWWidget):
         self.layout_main_area()
         
     def layout_main_area(self):
-        #self.box = gui.vBox(self.mainArea, True, margin=5)
         layout = self.mainArea.layout()
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(5)
-        self.preview = Preview(self.mainArea)
-        self.preview.setMinimumSize(800, 600)
-        #self.layout().addWidget(self.preview)
+        self.webview = QWebEngineView()
+        layout.addWidget(self.webview)
         
     def layout_control_area(self):
         layout = self.controlArea.layout()
@@ -67,25 +60,10 @@ class OWFactorAnalysisViewer(OWWidget):
         
     def sizeHint(self):
         return QSize(800, 600)
-    
-    def _getCurrentPalette(self) -> QPalette:
-        from orangecanvas import styles
-        settings = QSettings()
-        stylesheet = settings.value("stylesheet", "", type=str)
-        styles.style_sheet(stylesheet)
-        
-        theme = settings.value("palette", "", type=str)
-        if theme and theme in styles.colorthemes:
-            palette = styles.colorthemes[theme]()
-        else:
-            palette = QPalette()
-        
-        return palette
-        
+            
     def updateGraph(self):
-        global debug
         if self.dataset is None:
-            print("No dataset")
+            self.error("No input")
             return
         
         dataset = self.dataset
@@ -101,25 +79,19 @@ class OWFactorAnalysisViewer(OWWidget):
             ("Varimax FA", FactorAnalysis(rotation="varimax")),
         ]
         fig, axes = plt.subplots(ncols=len(methods), figsize=(10, 8), sharey=True)
-        fontcolor = 'black'
+        fontcolor = self.palette().windowText().color().name()
         labels = [f"Comp. {x+1}" for x in range(n_comps)]
-        #labelvars = [ ContinuousVariable(x) for x in labels]
-        #domain = Domain(labelvars, metas=[StringVariable('Method')])
-        #data = []
         for ax, (method, fa) in zip(axes, methods):
             fa.set_params(n_components=n_comps)
             fa.fit(X)
         
-            components = fa.components_.T
-            #row = components.tolist()+[method]
-            #data.append(row)
-        
+            components = fa.components_.T        
             vmax = np.abs(components).max()
             colormap = "RdBu_r"
             ax.imshow(components, cmap=colormap, vmax=vmax, vmin=-vmax)
             ax.set_yticks(np.arange(len(feature_names)))
-            ax.set_yticklabels(feature_names, fontsize=12, color=fontcolor)
-            ax.set_title(str(method), fontsize=18, color=fontcolor)
+            ax.set_yticklabels(feature_names, fontsize=16, color=fontcolor)
+            ax.set_title(str(method), fontsize=20, color=fontcolor)
             
             ticks = [x for x in range(n_comps)]
             ax.set_xticks(ticks)
@@ -127,26 +99,49 @@ class OWFactorAnalysisViewer(OWWidget):
             ax.set_xticklabels(labels, fontsize=10, color=fontcolor)
             transparent = (0, 0, 0, 0)
             fig.patch.set_facecolor(transparent)
-            debug = fig.patch
             
-        #self.Outputs.data.send(Table.from_list(domain, data))
-        fig.suptitle("Factors", fontsize=20)
-        
+        fig.suptitle("Factors", fontsize=20, color=fontcolor)
+
         fig = ax.get_figure()
+        svg_io = io.StringIO()
+        fig.savefig(svg_io, format='svg')
+        svg_data = svg_io.getvalue()
+        plt.close()
+        self._show_svg(svg_data)
+
         canvas = fig.canvas
         canvas.draw()
         plt.close()
         
-        width, height = canvas.get_width_height()
-        qformat = QImage.Format_ARGB32
-        buffer = canvas.buffer_rgba()
-        im = QImage(buffer, width, height, qformat)
-        im = im.scaledToWidth(width*2, Qt.TransformationMode.SmoothTransformation)
-        pm = QPixmap(im)
-        pm = pm.scaledToWidth(width*2)
-        self.preview.setPixmap(pm)
-        self.layout().update()
-        
+    def _show_svg(self, svg_str):
+        palette = self.palette()
+        bg_color = palette.window().color().name()
+        fg_color = palette.windowText().color().name()
+
+        # Wrap the SVG string in HTML
+        html = f"""
+        <html>
+        <head>
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 0;
+                    background-color: {bg_color};
+                    color: {fg_color};
+                }}
+                svg {{
+                    width: 100%;
+                    height: auto;
+                }}
+            </style>
+        </head>
+        <body>
+            {svg_str}
+        </body>
+        </html>
+        """
+        self.webview.setHtml(html)
+
     @Inputs.data
     def set_data(self, dataset: Table):
         self.dataset = dataset
@@ -159,4 +154,6 @@ class OWFactorAnalysisViewer(OWWidget):
         pass
 
 if __name__ == "__main__":  # pragma: no cover
+    from orangewidget.utils.widgetpreview import WidgetPreview
+    from orangecontrib.factoranalysis.widgets.darkmode import apply_dark_theme
     WidgetPreview(OWFactorAnalysisViewer).run(Table("iris"))
