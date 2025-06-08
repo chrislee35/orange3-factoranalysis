@@ -1,6 +1,5 @@
 import numpy as np
 
-#from sklearn.decomposition import FactorAnalysis
 from factor_analyzer import FactorAnalyzer
 
 from AnyQt.QtCore import Qt, QRectF
@@ -17,7 +16,6 @@ from orangewidget.utils.itemmodels import PyListModel
 from Orange.widgets.utils.itemmodels import DomainModel
 from Orange.widgets.utils.slidergraph import SliderGraph
 from orangewidget import gui
-import plotly.express as px
 
 from pyqtgraph import mkPen, TextItem
 BorderRole = next(gui.OrangeUserRole)
@@ -128,6 +126,8 @@ class OWFactorAnalysis(OWWidget):
     def clear_table(self):
         if len(self.components_accumulation) < 2:
             return
+        if self.fa_loadings is None:
+            return
 
         prev_n_components = self.components_accumulation[-2]
         for i in range(prev_n_components):
@@ -182,6 +182,8 @@ class OWFactorAnalysis(OWWidget):
         self.tablemodel.setVerticalHeaderLabels(vheader_labels)
 
         self.clear_table()
+        if self.fa_loadings is None:
+            return
         # insert eigen values.
         for factor in range(len(self.fa_loadings.X)):
             eigen = self.eigen_values[factor]
@@ -256,7 +258,7 @@ class OWFactorAnalysis(OWWidget):
 
     def setup_plot(self):
         self.plot.clear_plot()
-        if self.dataset is None: return
+        if self.dataset is None or self.fa_loadings is None: return
 
         # i want the graph axis selection combo box to start from 1,
         # but i want factor 1 to correspond to first row in the table - row with index 0.
@@ -275,19 +277,32 @@ class OWFactorAnalysis(OWWidget):
         foreground = self.plot.palette().text().color()
         foreground.setAlpha(128)
 
-        palette = px.colors.qualitative.Plotly
-        c_i = 0
+        # Plotly's palette
+        palette = [
+            "#636EFA",
+            "#00CC96",
+            "#AB63FA",
+            "#FFA15A",
+            "#19D3F3",
+            "#FF6692",
+            "#B6E880",
+            "#FF97FF",
+            "#FECB52",
+            "#EF553B",
+        ]
+ 
+        arrow_color = self.plot.palette().text().color()
+        arrow_color.setRedF(1.0)
+        arrow_color.setGreenF(arrow_color.greenF()/2.0)
+        arrow_color.setBlueF(arrow_color.blueF()/2.0)
         # draw the variable vectors and their names into the graph.
         for x, y, attr_name in zip(self.factor1, self.factor2, self.attributes):
-            color = palette[c_i % len(palette)]
-            c_i += 1
-
             x_vector, y_vector = [0, x], [0, y]
             self.plot.plot(x_vector, y_vector,
-                pen=mkPen(color, width=1), antialias=True,
+                pen=mkPen(arrow_color, width=1), antialias=True,
             )
 
-            self.draw_arrowhead(x, y, color, 30)
+            self.draw_arrowhead(x, y, arrow_color, 30)
 
             label = TextItem(text=attr_name, anchor=(0, 1), color=foreground)
             label.setPos(x_vector[-1], y_vector[-1])
@@ -306,10 +321,12 @@ class OWFactorAnalysis(OWWidget):
             data_proj = self.dataset.X @ loadings_matrix
             data_proj = self.scale_data_proj(data_proj)
 
+            samples_per_class = 2000 // n_classes
+
             for class_idx in range(n_classes):
                 indices = np.where(class_vals == class_idx)[0]
-                xs = data_proj[indices, 0]
-                ys = data_proj[indices, 1]
+                xs = data_proj[indices, 0][0:samples_per_class]
+                ys = data_proj[indices, 1][0:samples_per_class]
                 scatter = self.plot.plot(
                     xs, ys,
                     pen=None,
@@ -346,49 +363,32 @@ class OWFactorAnalysis(OWWidget):
         factor2_range = np.max(1.1 * np.abs(self.factor2))
         self.plot.setRange(xRange=(-factor1_range, factor1_range), yRange=(-factor2_range, factor2_range))
 
-    # def factor_analysis_new(self):
-    #     # with chosen n_components and depending on the user-selected rotation, calculate the FA on self.dataset.
-    #     rotation = [None, "Varimax", "Promax", "Oblimin", "Oblimax", "Quartimin", "Quartimax", "Equamax"][self.rotation]
-    #     if rotation is not None: rotation = rotation.lower()
-    #     fa = FactorAnalysis(rotation=rotation, n_components=self.n_components, tol=0.0)
-    #     fa.fit(self.dataset.X)
-
-    #     # transform loadings correct format.
-    #     loadings = fa.components_.T
-    #     self.communalities = np.sum(loadings ** 2, axis=1)
-
-    #     # from result variable (instance of FactorAnalyzer class) get the eigenvalues.
-    #     X_std = (self.dataset.X - np.mean(self.dataset.X, axis=0)) / np.std(self.dataset.X, axis=0)
-    #     corr = np.corrcoef(X_std, rowvar=False)
-    #     eigen_vals, _ = np.linalg.eigh(corr)
-    #     self.eigen_values = np.flip(np.sort(eigen_vals))
-
-    #     # transform the table back to Orange.data.Table.
-    #     self.fa_loadings = Table.from_numpy(Domain(self.dataset.domain.attributes), loadings.T)
-
     def factor_analysis(self):
         if self.dataset is None: return
-        # with chosen n_components and depending on the user-selected rotation, calculate the FA on self.dataset.
-        rotation = [None, "Varimax", "Promax", "Oblimin", "Oblimax", "Quartimin", "Quartimax", "Equamax"][self.rotation]
-        fa = FactorAnalyzer(rotation=rotation, n_factors=self.n_components)
-        fa.fit(self.dataset.X)
+        try:
+            # with chosen n_components and depending on the user-selected rotation, calculate the FA on self.dataset.
+            rotation = [None, "Varimax", "Promax", "Oblimin", "Oblimax", "Quartimin", "Quartimax", "Equamax"][self.rotation]
+            fa = FactorAnalyzer(rotation=rotation, n_factors=self.n_components)
+            fa.fit(self.dataset.X)
 
-        # transform loadings correct format.
-        loadings = []
-        for i in range(self.n_components):
-            row = []
-            for x in fa.loadings_:
-                row.append(x[i])
-            loadings.append(row)
+            # transform loadings correct format.
+            loadings = []
+            for i in range(self.n_components):
+                row = []
+                for x in fa.loadings_:
+                    row.append(x[i])
+                loadings.append(row)
 
-        self.communalities = fa.get_communalities()
+            self.communalities = fa.get_communalities()
 
-        # from result variable (instance of FactorAnalyzer class) get the eigenvalues.
-        self.eigen_values = fa.get_eigenvalues()
-        self.eigen_values = self.eigen_values[0]
-    
-       # transform the table back to Orange.data.Table.
-        self.fa_loadings = Table.from_numpy(Domain(self.dataset.domain.attributes), loadings)
+            # from result variable (instance of FactorAnalyzer class) get the eigenvalues.
+            self.eigen_values = fa.get_eigenvalues()
+            self.eigen_values = self.eigen_values[0]
+        
+            # transform the table back to Orange.data.Table.
+            self.fa_loadings = Table.from_numpy(Domain(self.dataset.domain.attributes), loadings)
+        except Exception as e:
+            self.error(str(e))
 
     @gui.deferred
     def commit(self):
@@ -401,5 +401,7 @@ class OWFactorAnalysis(OWWidget):
             self.insert_table()
 
 if __name__ == "__main__":
-    from orangecontrib.factoranalysis.widgets.darkmode import apply_dark_theme
-    WidgetPreview(OWFactorAnalysis).run(Table("iris"))
+    #from orangecontrib.factoranalysis.widgets.darkmode import apply_dark_theme
+    data = Table("/home/chris/.local/share/Orange/3.38.1/datasets/core/hrm-employee-attrition.xlsx")
+    #print(data)
+    WidgetPreview(OWFactorAnalysis).run(data)
